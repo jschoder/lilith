@@ -1,0 +1,17 @@
+{
+  "name": "lilith",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:server": "pnpm --filter @lilith/server dev",
+    "dev:web": "pnpm --filter @lilith/web dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
