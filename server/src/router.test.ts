@@ -132,6 +132,24 @@ describe("conversation.sendMessage + conversation.history", () => {
     expect(history[0]).toMatchObject({ sender: "user", text: "hello" });
   });
 
+  it("runs a background Appraisal after each reply, so by the time the next turn starts the prior turn's messages carry real emotion_vector/peak_emotion_intensity instead of the zero placeholder", async () => {
+    const client = caller();
+    const created = await client.character.create(baseCreateInput);
+
+    await client.conversation.sendMessage({ id: created.id, text: "I got the promotion!" });
+    // sendMessage joins the previous turn's background Appraisal before starting —
+    // this second call guarantees turn 1's Appraisal has finished by the time it resolves.
+    await client.conversation.sendMessage({ id: created.id, text: "thanks!" });
+
+    const history = await client.conversation.history({ id: created.id });
+    const [turn1User, turn1Reply] = history;
+
+    expect(turn1User?.peakEmotionIntensity).toBeGreaterThan(0);
+    expect(turn1User?.peakEmotionIntensity).toBe(Math.max(...Object.values(turn1User!.emotionVector)));
+    expect(turn1Reply?.emotionVector).toEqual(turn1User?.emotionVector);
+    expect(turn1Reply?.peakEmotionIntensity).toBe(turn1User?.peakEmotionIntensity);
+  });
+
   it("burst: a second message mid-generation restarts, yielding exactly one character reply that both calls resolve to", async () => {
     const client = caller(dataDir, delayedLlm(30));
     const created = await client.character.create(baseCreateInput);

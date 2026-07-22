@@ -2,7 +2,9 @@ import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { characterDir, readCharacterDefinition, writeCharacterDirectory } from "./store.js";
+import { zeroEmotionVector } from "../domain/plutchik.js";
+import { readEmotionState } from "../emotion/store.js";
+import { characterDir, openCharacterDb, readCharacterDefinition, writeCharacterDirectory } from "./store.js";
 import type { CharacterDefinition } from "./types.js";
 
 const sampleDefinition: CharacterDefinition = {
@@ -51,6 +53,19 @@ describe("writeCharacterDirectory", () => {
 
     const written = JSON.parse(await readFile(path.join(dir, "definition.json"), "utf8"));
     expect(written).toEqual(sampleDefinition);
+  });
+
+  it("seeds a zero-initialized emotion_state singleton row", async () => {
+    await writeCharacterDirectory(sampleDefinition, dataDir);
+
+    const db = openCharacterDb(sampleDefinition.id, dataDir);
+    try {
+      const { state } = await readEmotionState(db);
+      expect(state.emotion).toEqual(zeroEmotionVector());
+      expect(state.mood).toEqual(zeroEmotionVector());
+    } finally {
+      db.close();
+    }
   });
 
   it("leaves no directory behind when a step after mkdir fails", async () => {

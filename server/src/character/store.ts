@@ -2,6 +2,7 @@ import { createClient, type Client } from "@libsql/client";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CREATE_MESSAGES_TABLE } from "../conversation/messages.js";
+import { CREATE_EMOTION_STATE_TABLE, initializeEmotionState } from "../emotion/store.js";
 import { isWellFormedCharacterId } from "./id.js";
 import type { CharacterDefinition } from "./types.js";
 
@@ -50,9 +51,10 @@ interface WriteOptions {
 
 /**
  * Writes a Character's `definition.json`, `character.db` (with empty
- * `minor_goals` and `messages` tables), and `character.log` together. If
- * any step fails, the whole directory is removed — no partial Character is
- * ever left on disk, per ticket 16.
+ * `minor_goals` and `messages` tables, plus a zero-initialized
+ * `emotion_state` singleton row per ticket 18), and `character.log`
+ * together. If any step fails, the whole directory is removed — no partial
+ * Character is ever left on disk, per ticket 16.
  */
 export async function writeCharacterDirectory(
   definition: CharacterDefinition,
@@ -71,6 +73,8 @@ export async function writeCharacterDirectory(
     try {
       await db.execute(CREATE_MINOR_GOALS_TABLE);
       await db.execute(CREATE_MESSAGES_TABLE);
+      await db.execute(CREATE_EMOTION_STATE_TABLE);
+      await initializeEmotionState(db, new Date().toISOString());
     } finally {
       db.close();
     }

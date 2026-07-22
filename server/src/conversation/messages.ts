@@ -1,5 +1,5 @@
 import type { Client } from "@libsql/client";
-import { zeroEmotionVector, type EmotionVector } from "../domain/plutchik.js";
+import { parseEmotionVector, serializeEmotionVector, zeroEmotionVector, type EmotionVector } from "../domain/plutchik.js";
 
 export type MessageSender = "user" | "character";
 
@@ -45,7 +45,7 @@ function fromRow(row: MessageRow): StoredMessage {
     sender: row.sender as MessageSender,
     text: row.text,
     createdAt: row.created_at,
-    emotionVector: JSON.parse(row.emotion_vector) as EmotionVector,
+    emotionVector: parseEmotionVector(row.emotion_vector),
     peakEmotionIntensity: row.peak_emotion_intensity,
   };
 }
@@ -57,7 +57,7 @@ export async function appendMessage(db: Client, sender: MessageSender, text: str
 
   const result = await db.execute({
     sql: `INSERT INTO messages (sender, text, created_at, emotion_vector, peak_emotion_intensity) VALUES (?, ?, ?, ?, ?)`,
-    args: [sender, text, createdAt, JSON.stringify(emotionVector), peakEmotionIntensity],
+    args: [sender, text, createdAt, serializeEmotionVector(emotionVector), peakEmotionIntensity],
   });
 
   return { id: Number(result.lastInsertRowid), sender, text, createdAt, emotionVector, peakEmotionIntensity };
@@ -67,4 +67,17 @@ export async function appendMessage(db: Client, sender: MessageSender, text: str
 export async function listMessages(db: Client): Promise<StoredMessage[]> {
   const result = await db.execute("SELECT * FROM messages ORDER BY id ASC");
   return (result.rows as unknown as MessageRow[]).map(fromRow);
+}
+
+/** Replaces a message's placeholder emotion_vector/peak_emotion_intensity with real per-turn Appraisal output (ticket 18). */
+export async function updateMessageEmotion(
+  db: Client,
+  id: number,
+  emotionVector: EmotionVector,
+  peakEmotionIntensity: number,
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE messages SET emotion_vector = ?, peak_emotion_intensity = ? WHERE id = ?`,
+    args: [serializeEmotionVector(emotionVector), peakEmotionIntensity, id],
+  });
 }
