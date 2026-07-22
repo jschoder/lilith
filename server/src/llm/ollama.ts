@@ -19,7 +19,12 @@ interface OllamaEmbeddingsResponse {
 export class OllamaLlmPort implements LlmPort {
   constructor(private readonly config: OllamaConfig) {}
 
-  async generateStructured<T>(args: { system: string; prompt: string; schema: z.ZodType<T> }): Promise<T> {
+  async generateStructured<T>(args: {
+    system: string;
+    prompt: string;
+    schema: z.ZodType<T>;
+    signal?: AbortSignal;
+  }): Promise<T> {
     const response = await fetch(`${this.config.baseUrl}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -32,6 +37,7 @@ export class OllamaLlmPort implements LlmPort {
         format: z.toJSONSchema(args.schema),
         stream: false,
       }),
+      signal: args.signal,
     });
     if (!response.ok) {
       throw new Error(`Ollama chat request failed: ${response.status} ${await response.text()}`);

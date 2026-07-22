@@ -26,3 +26,8 @@ export interface EmotionConstants {
 }
 
 export type EmotionConstantsVector = Record<PlutchikPrimary, EmotionConstants>;
+
+/** Placeholder state for a newly-appended Message, before ticket 18's Appraisal fills in the real snapshot. */
+export function zeroEmotionVector(): EmotionVector {
+  return Object.fromEntries(PLUTCHIK_PRIMARIES.map((primary) => [primary, 0])) as EmotionVector;
+}

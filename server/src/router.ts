@@ -2,7 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { listAvatarSets } from "./character/avatar-sets.js";
 import { createCharacter } from "./character/create.js";
-import { readCharacterDefinition } from "./character/store.js";
+import { readCharacterDefinition, withCharacterDb } from "./character/store.js";
+import { listMessages, type StoredMessage } from "./conversation/messages.js";
+import { generateAndPersistReply, persistUserMessage } from "./conversation/reply.js";
+import { ConversationManager } from "./conversation/session.js";
 import type { LlmPort } from "./llm/port.js";
 import { publicProcedure, router } from "./trpc.js";
 
@@ -21,6 +24,8 @@ const createCharacterInput = z.object({
 
 /** Built from `deps` rather than as a module-level singleton so tests can inject a fake LLM and a temp data dir. */
 export function createAppRouter(deps: AppDeps) {
+  const conversations = new ConversationManager<StoredMessage>();
+
   return router({
     character: router({
       listAvatarSets: publicProcedure.query(() => listAvatarSets()),
@@ -40,6 +45,40 @@ export function createAppRouter(deps: AppDeps) {
         }
         return definition;
       }),
+    }),
+
+    conversation: router({
+      history: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+        const definition = await readCharacterDefinition(input.id, deps.dataDir);
+        if (!definition) {
+          throw new TRPCError({ code: "NOT_FOUND" });
+        }
+        return withCharacterDb(input.id, deps.dataDir, listMessages);
+      }),
+
+      sendMessage: publicProcedure
+        .input(z.object({ id: z.string(), text: z.string().min(1) }))
+        .mutation(async ({ input }) => {
+          const definition = await readCharacterDefinition(input.id, deps.dataDir);
+          if (!definition) {
+            throw new TRPCError({ code: "NOT_FOUND" });
+          }
+
+          // Persisted immediately, independent of generation outcome (ADR-0009).
+          await persistUserMessage(definition, deps.dataDir, input.text);
+
+          try {
+            return await conversations.requestReply(input.id, (signal) =>
+              generateAndPersistReply(definition, deps.dataDir, deps.llm, signal),
+            );
+          } catch (err) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Reply generation failed.",
+              cause: err,
+            });
+          }
+        }),
     }),
   });
 }
